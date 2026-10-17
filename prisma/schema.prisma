@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Job {
+  id                 String   @id
+  source             String
+  slug               String
+  label              String
+  title              String
+  location           String?
+  country            String?
+  region             String?
+  city               String?
+  remote             Boolean  @default(false)
+  locationConfidence String   @default("none")
+  url                String
+  department         String?
+  createdAt          String?
+  firstSeenAt        DateTime @default(now())
+  isNew              Boolean  @default(true)
+  isActive           Boolean  @default(true)
+  category           String   @default("so")
+}
+
+model ScanRun {
+  id          Int      @id @default(autoincrement())
+  ranAt       DateTime @default(now())
+  isBaseline  Boolean  @default(false)
+  newJobCount Int      @default(0)
+  totalJobs   Int      @default(0)
+  error       String?
+}
