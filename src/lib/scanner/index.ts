@@ -11,6 +11,7 @@ import { fetchWorkday } from "./workday";
 import { fetchTeamtailor } from "./teamtailor";
 import { fetchLever } from "./lever";
 import { fetchAdobe } from "./adobe";
+import { fetchTikTok } from "./tiktok";
 import { COMPANIES } from "./companies";
 import type { ScannedJob } from "@/types";
 import type { PrismaClient } from "@/generated/prisma";
@@ -56,6 +57,8 @@ export async function runScan(db: PrismaClient): Promise<ScanResult> {
         jobs = await fetchLever(company);
       } else if (company.source === "adobe") {
         jobs = await fetchAdobe(company);
+      } else if (company.source === "tiktok") {
+        jobs = await fetchTikTok(company);
       }
       allJobs.push(...jobs);
     }),

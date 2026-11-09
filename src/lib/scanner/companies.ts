@@ -92,6 +92,8 @@ export const COMPANIES: Company[] = [
   { slug: "zendesk",   label: "Zendesk",   source: "workday", category: "cx", wdInstance: "wd1",  wdBoard: "zendesk" },
   { slug: "verizon",   label: "Verizon",   source: "workday", category: "cx", wdInstance: "wd12", wdBoard: "verizon-careers" },
   { slug: "sprinklr",  label: "Sprinklr",  source: "workday", category: "cx", wdInstance: "wd1",  wdBoard: "careers" },
+  { slug: "pwc",       label: "PwC",       source: "workday", category: "cx", wdInstance: "wd3",  wdBoard: "US_Experienced_Careers",
+    keywords: ["cx manager", "csx manager", "contact center transformation"] },
   // CX — Medallia (Jibe/iCIMS)
   { slug: "medallia",  label: "Medallia",  source: "medallia",  category: "cx" },
   // CX — Qualtrics (Phenom People)
@@ -100,6 +102,8 @@ export const COMPANIES: Company[] = [
   { slug: "payjoy", label: "PayJoy", source: "lever", category: "cx" },
   // CX — Adobe (Phenom)
   { slug: "adobe", label: "Adobe", source: "adobe", category: "cx" },
+  // CX — TikTok (lifeattiktok.com API)
+  { slug: "tiktok", label: "TikTok", source: "tiktok", category: "cx", jdKeywords: ["GNE"] },
   // CX — Teamtailor
   { slug: "moove", label: "Moove", source: "teamtailor", category: "cx", ttDomain: "careers.moove.io" },
 ];

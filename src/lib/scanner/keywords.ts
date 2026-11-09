@@ -44,6 +44,18 @@ function matchesSOKeywords(title: string, department?: string | null): boolean {
   return INCLUDE.some((kw) => text.includes(kw));
 }
 
-export function matchesKeywords(title: string, department: string | null | undefined, category: Category): boolean {
+// Punctuation-insensitive so "CSX - Manager" matches "csx manager"
+const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9&]+/g, " ").trim();
+
+export function matchesKeywords(
+  title: string,
+  department: string | null | undefined,
+  category: Category,
+  customKeywords?: string[],
+): boolean {
+  if (customKeywords) {
+    const text = normalize(`${title} ${department ?? ""}`);
+    return customKeywords.some((kw) => text.includes(normalize(kw)));
+  }
   return category === "cx" ? matchesCXKeywords(title, department) : matchesSOKeywords(title, department);
 }

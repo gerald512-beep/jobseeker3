@@ -1,4 +1,5 @@
 import { matchesKeywords } from "./keywords";
+import { parseGreenhouseLocation } from "./location";
 import type { Company, ScannedJob } from "@/types";
 
 const PAGE_SIZE = 20;
@@ -51,7 +52,9 @@ function isUS(loc: string): boolean {
     const last = parts[parts.length - 1];
     if (US_STATES.has(last) || US_STATES.has(last.split(/\s+/)[0])) return true;
   }
-  return false;
+  // "ST-City" format, e.g. PwC's "NY-New York"
+  const parsed = parseGreenhouseLocation(loc);
+  return parsed.country === "US" && parsed.confidence === "high";
 }
 
 function reqId(job: WDListing): string {
@@ -107,7 +110,7 @@ export async function fetchWorkday(company: Company): Promise<ScannedJob[]> {
 
   for (const listing of allListings) {
     const title = listing.title?.trim() ?? "";
-    if (!matchesKeywords(title, null, company.category)) continue;
+    if (!matchesKeywords(title, null, company.category, company.keywords)) continue;
 
     const locText = listing.locationsText ?? "";
     const isMultiLoc = /^\d+ Locations$/.test(locText);
