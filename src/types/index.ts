@@ -1,6 +1,6 @@
 export type Source = "greenhouse" | "ashby" | "smartrecruiters" | "waymo" | "ebay" | "uber" | "medallia" | "qualtrics" | "glassbox" | "workday" | "teamtailor" | "lever" | "adobe" | "tiktok";
 export type Confidence = "high" | "medium" | "low" | "none";
-export type Category = "so" | "cx";
+export type Category = "so" | "cx" | "adobe";
 
 export interface Company {
   slug: string;
@@ -12,6 +12,7 @@ export interface Company {
   ttDomain?: string;   // Teamtailor only: e.g. "careers.moove.io"
   keywords?: string[]; // Replaces the category keyword list (Workday scanner only)
   jdKeywords?: string[]; // Case-sensitive whole words required in the job description; replaces category keywords (TikTok scanner only)
+  trackAll?: boolean;    // Keep every US job (no keyword filter) and record daily counts in DailyStat (Adobe scanner only)
 }
 
 export interface ParsedLocation {

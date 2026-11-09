@@ -4,9 +4,10 @@ import { useEffect, useState, useCallback } from "react";
 import JobCard from "@/components/JobCard";
 import FilterBar, { type Filters } from "@/components/FilterBar";
 import SearchPanel from "@/components/SearchPanel";
+import DailyTracker from "@/components/DailyTracker";
 import type { Job } from "../generated/prisma";
 
-type Tab = "so" | "cx" | "search";
+type Tab = "so" | "cx" | "adobe" | "search";
 
 interface FilterOptions {
   companies: { value: string; label: string }[];
@@ -17,6 +18,7 @@ interface FilterOptions {
 const TAB_META: Record<Tab, { title: string; subtitle: string }> = {
   so:     { title: "S&O Jobs",  subtitle: "Strategy & Operations roles"            },
   cx:     { title: "CX Jobs",   subtitle: "Customer Experience roles"              },
+  adobe:  { title: "Adobe",     subtitle: "Every Adobe US posting, counted by day" },
   search: { title: "Search",    subtitle: "Search any company on any job board"    },
 };
 
@@ -63,7 +65,7 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (tab === "search") return;
+    if (tab === "search" || tab === "adobe") return;
     fetchOptions(tab);
     fetchJobs(DEFAULT_FILTERS, tab);
   }, [tab, fetchOptions, fetchJobs]);
@@ -80,7 +82,7 @@ export default function Page() {
     <main className="min-h-screen bg-gray-950">
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-950 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-white">{meta.title}</h1>
             <p className="text-xs text-gray-500">{meta.subtitle}</p>
@@ -88,11 +90,11 @@ export default function Page() {
           <div className="flex items-center gap-4">
             {/* Tabs */}
             <div className="flex gap-1">
-              {(["so", "cx", "search"] as Tab[]).map((t) => (
+              {(["so", "cx", "adobe", "search"] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => handleTabChange(t)}
-                  className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${
+                  className={`px-3 py-1.5 text-sm rounded-md font-medium whitespace-nowrap transition-colors ${
                     tab === t
                       ? "bg-blue-600 text-white"
                       : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
@@ -102,7 +104,7 @@ export default function Page() {
                 </button>
               ))}
             </div>
-            {tab !== "search" && (
+            {(tab === "so" || tab === "cx") && (
               <div className="text-right text-xs text-gray-500">
                 {lastUpdated && <p>Updated {lastUpdated}</p>}
                 <p>{total} job{total !== 1 ? "s" : ""}</p>
@@ -115,6 +117,8 @@ export default function Page() {
       <div className="max-w-5xl mx-auto px-4 py-6">
         {tab === "search" ? (
           <SearchPanel />
+        ) : tab === "adobe" ? (
+          <DailyTracker />
         ) : (
           <>
             <FilterBar

@@ -38,49 +38,59 @@ interface RefineSearch {
   data?: { jobs?: PhenomJob[] };
 }
 
-async function fetchPage(from: number): Promise<RefineSearch | null> {
-  try {
-    const res = await fetch(WIDGETS_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
-      body: JSON.stringify({
-        lang: "en_us", deviceType: "desktop", country: "us", pageName: "search-results",
-        ddoKey: "refineSearch", from, size: PAGE_SIZE, jobs: true, counts: false,
-        jdsource: "facets", siteType: "external", keywords: "", global: true,
-        selected_fields: { country: [US] },
-      }),
-    });
-    if (!res.ok) {
-      console.error(`[adobe] HTTP ${res.status} for from=${from}`);
-      return null;
-    }
-    const data = await res.json() as { refineSearch?: RefineSearch };
-    return data.refineSearch ?? null;
-  } catch (err) {
-    console.error(`[adobe] fetch error for from=${from}:`, err);
-    return null;
+async function fetchPage(from: number): Promise<RefineSearch> {
+  const res = await fetch(WIDGETS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
+    body: JSON.stringify({
+      lang: "en_us", deviceType: "desktop", country: "us", pageName: "search-results",
+      ddoKey: "refineSearch", from, size: PAGE_SIZE, jobs: true, counts: false,
+      jdsource: "facets", siteType: "external", keywords: "", global: true,
+      selected_fields: { country: [US] },
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for from=${from}`);
+  const data = await res.json() as { refineSearch?: RefineSearch };
+  if (!data.refineSearch) throw new Error(`no refineSearch payload for from=${from}`);
+  return data.refineSearch;
+}
+
+// Throws unless every US job was fetched, so a failed or partial fetch is never mistaken for jobs closing.
+async function fetchAllUSJobs(): Promise<PhenomJob[]> {
+  const byId = new Map<string, PhenomJob>();
+  let totalHits = Infinity;
+  for (let from = 0; from < totalHits; from += PAGE_SIZE) {
+    const page = await fetchPage(from);
+    totalHits = page.totalHits;
+    for (const job of page.data?.jobs ?? []) byId.set(job.jobId, job);
   }
+  if (byId.size < totalHits) throw new Error(`incomplete fetch: got ${byId.size} of ${totalHits} US jobs`);
+  console.log(`[adobe] ${byId.size} US jobs`);
+  return [...byId.values()];
+}
+
+// Several COMPANIES entries (S&O, CX, tracker) read the same board in one scan; share one fetch between them.
+const SHARE_MS = 5 * 60 * 1000;
+let shared: { startedAt: number; jobs: Promise<PhenomJob[]> } | null = null;
+
+function getUSJobs(): Promise<PhenomJob[]> {
+  if (!shared || Date.now() - shared.startedAt > SHARE_MS) {
+    const jobs = fetchAllUSJobs();
+    shared = { startedAt: Date.now(), jobs };
+    jobs.catch(() => { if (shared?.jobs === jobs) shared = null; }); // don't reuse a failed fetch
+  }
+  return shared.jobs;
 }
 
 export async function fetchAdobe(company: Company): Promise<ScannedJob[]> {
-  const usJobs: PhenomJob[] = [];
-  let totalHits = Infinity;
-
-  for (let from = 0; from < totalHits; from += PAGE_SIZE) {
-    const page = await fetchPage(from);
-    if (!page) break;
-    totalHits = page.totalHits;
-    usJobs.push(...(page.data?.jobs ?? []));
-  }
-  console.log(`[adobe] ${usJobs.length} US jobs`);
-
+  const usJobs = await getUSJobs();
   const jobs: ScannedJob[] = [];
 
   for (const job of usJobs) {
     const title = job.title?.trim() ?? "";
     const dept = job.category ?? null;
 
-    if (!matchesKeywords(title, dept, company.category)) continue;
+    if (!company.trackAll && !matchesKeywords(title, dept, company.category)) continue;
 
     // Multi-location jobs can have a non-US primary location; use their US location instead
     const usLoc = job.country === US ? null : job.multi_location?.find((l) => l.endsWith(US));
@@ -97,7 +107,8 @@ export async function fetchAdobe(company: Company): Promise<ScannedJob[]> {
     const createdAt = job.postedDate ? job.postedDate.split("T")[0] : null;
 
     jobs.push({
-      id: `adobe-${job.jobId}`,
+      // Tracker rows get their own IDs so they never collide with the S&O/CX rows for the same posting
+      id: company.trackAll ? `adobe-all-${job.jobId}` : `adobe-${job.jobId}`,
       source: "adobe",
       slug: company.slug,
       label: company.label,

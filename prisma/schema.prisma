@@ -29,6 +29,19 @@ model Job {
   category           String   @default("so")
 }
 
+// Daily record for boards tracked with `trackAll` (currently Adobe): one row per local calendar day.
+model DailyStat {
+  date       String    // local calendar date, YYYY-MM-DD
+  slug       String
+  category   String
+  posted     Int       @default(0) // known jobs whose posted date is this day (still open or since closed)
+  discovered Int       @default(0) // jobs first found by scans run on this day
+  active     Int?      // open jobs after the last scan this day; null if no scan ran that day
+  scannedAt  DateTime? // time of the last successful scan this day
+
+  @@id([date, slug, category])
+}
+
 model ScanRun {
   id          Int      @id @default(autoincrement())
   ranAt       DateTime @default(now())

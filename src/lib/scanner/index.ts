@@ -13,7 +13,8 @@ import { fetchLever } from "./lever";
 import { fetchAdobe } from "./adobe";
 import { fetchTikTok } from "./tiktok";
 import { COMPANIES } from "./companies";
-import type { ScannedJob } from "@/types";
+import { companyKey, recordDailyStats, type DailySummary } from "./daily";
+import type { Company, ScannedJob, Source } from "@/types";
 import type { PrismaClient } from "@/generated/prisma";
 
 export interface ScanResult {
@@ -21,46 +22,45 @@ export interface ScanResult {
   newJobCount: number;
   totalJobs: number;
   isBaseline: boolean;
+  failures: string[];
+  daily: DailySummary[];
   error?: string;
 }
 
+const FETCHERS: Record<Source, (company: Company) => Promise<ScannedJob[]>> = {
+  greenhouse: fetchGreenhouse,
+  ashby: fetchAshby,
+  smartrecruiters: fetchSmartRecruiters,
+  waymo: fetchWaymo,
+  ebay: fetchEbay,
+  uber: fetchUber,
+  medallia: fetchMedallia,
+  qualtrics: fetchQualtrics,
+  glassbox: fetchGlassbox,
+  workday: fetchWorkday,
+  teamtailor: fetchTeamtailor,
+  lever: fetchLever,
+  adobe: fetchAdobe,
+  tiktok: fetchTikTok,
+};
+
 export async function runScan(db: PrismaClient): Promise<ScanResult> {
   const allJobs: ScannedJob[] = [];
+  const failures: string[] = [];
+  const failedKeys = new Set<string>();
 
-  // Fetch all companies concurrently
+  // Fetch all companies concurrently. A fetcher that throws is recorded as failed, and its
+  // existing jobs are left alone rather than marked inactive.
   await Promise.all(
     COMPANIES.map(async (company) => {
-      let jobs: ScannedJob[] = [];
-      if (company.source === "greenhouse") {
-        jobs = await fetchGreenhouse(company);
-      } else if (company.source === "ashby") {
-        jobs = await fetchAshby(company);
-      } else if (company.source === "smartrecruiters") {
-        jobs = await fetchSmartRecruiters(company);
-      } else if (company.source === "waymo") {
-        jobs = await fetchWaymo(company);
-      } else if (company.source === "ebay") {
-        jobs = await fetchEbay(company);
-      } else if (company.source === "uber") {
-        jobs = await fetchUber(company);
-      } else if (company.source === "medallia") {
-        jobs = await fetchMedallia(company);
-      } else if (company.source === "qualtrics") {
-        jobs = await fetchQualtrics(company);
-      } else if (company.source === "glassbox") {
-        jobs = await fetchGlassbox(company);
-      } else if (company.source === "workday") {
-        jobs = await fetchWorkday(company);
-      } else if (company.source === "teamtailor") {
-        jobs = await fetchTeamtailor(company);
-      } else if (company.source === "lever") {
-        jobs = await fetchLever(company);
-      } else if (company.source === "adobe") {
-        jobs = await fetchAdobe(company);
-      } else if (company.source === "tiktok") {
-        jobs = await fetchTikTok(company);
+      try {
+        allJobs.push(...(await FETCHERS[company.source](company)));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        failedKeys.add(companyKey(company));
+        failures.push(`${company.source}/${company.slug} (${company.category}): ${message}`);
+        console.error(`[scan] ${company.source}/${company.slug} (${company.category}) failed: ${message}`);
       }
-      allJobs.push(...jobs);
     }),
   );
 
@@ -71,14 +71,23 @@ export async function runScan(db: PrismaClient): Promise<ScanResult> {
   // Load existing jobs for change detection (exclude adzuna search results)
   const existingRows = await db.job.findMany({
     where: { source: { not: "adzuna" } },
-    select: { id: true, title: true, location: true, createdAt: true },
+    select: { id: true, title: true, location: true, createdAt: true, isActive: true, source: true, slug: true, category: true },
   });
-  const existingMap = new Map(existingRows.map((j: { id: string; title: string; location: string | null; createdAt: string | null }) => [j.id, j]));
+  const existingMap = new Map(existingRows.map((j) => [j.id, j]));
   const existingIds = new Set(existingMap.keys());
+
+  // Tracker boards (trackAll) are counted in the daily record, not in the S&O/CX new/total counts
+  const trackedCompanies = COMPANIES.filter((c) => c.trackAll);
+  const trackedKeys = new Set(trackedCompanies.map(companyKey));
+  const isTracked = (j: ScannedJob) => trackedKeys.has(companyKey(j));
+  // A category's first scan is its baseline: store its jobs without flagging them all as new
+  const knownCategories = new Set(existingRows.map((j) => j.category));
+  const isCategoryBaseline = (j: ScannedJob) => !knownCategories.has(j.category);
 
   const dedupedJobs = [...new Map(allJobs.map((j) => [j.id, j])).values()];
   const currentIds = new Set(dedupedJobs.map((j) => j.id));
   const newJobs = dedupedJobs.filter((j) => !existingIds.has(j.id));
+  const countedNewJobs = newJobs.filter((j) => !isTracked(j));
 
   // Jobs with changed title, location, or posted date — treat as new
   const changedJobs = dedupedJobs.filter((j) => {
@@ -91,8 +100,10 @@ export async function runScan(db: PrismaClient): Promise<ScanResult> {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const recentCutoff = thirtyDaysAgo.toISOString().split("T")[0];
 
-  // Soft-delete jobs no longer returned by any API
-  const staleIds = [...existingIds].filter((id) => !currentIds.has(id));
+  // Soft-delete active jobs no longer returned by any API (skipping companies whose fetch failed)
+  const staleIds = existingRows
+    .filter((j) => j.isActive && !currentIds.has(j.id) && !failedKeys.has(companyKey(j)))
+    .map((j) => j.id);
   if (staleIds.length > 0) {
     await db.job.updateMany({ where: { id: { in: staleIds } }, data: { isActive: false } });
     console.log(`[scan] Marked ${staleIds.length} jobs inactive.`);
@@ -138,32 +149,41 @@ export async function runScan(db: PrismaClient): Promise<ScanResult> {
           department: job.department,
           createdAt: job.createdAt,
           category: job.category,
-          isNew: !isBaseline && (job.createdAt ? job.createdAt >= recentCutoff : false),
+          isNew: !isBaseline && !isCategoryBaseline(job) && (job.createdAt ? job.createdAt >= recentCutoff : false),
         },
       }),
     ),
   ]);
 
+  const newJobCount = isBaseline ? 0 : countedNewJobs.length;
+  const totalJobs = allJobs.filter((j) => !isTracked(j)).length;
+
   // Record the scan run
   await db.scanRun.create({
     data: {
       isBaseline,
-      newJobCount: isBaseline ? 0 : newJobs.length,
-      totalJobs: allJobs.length,
+      newJobCount,
+      totalJobs,
+      error: failures.length > 0 ? failures.join("; ") : null,
     },
   });
 
+  // Daily record for tracker boards. Jobs stored on a category's baseline scan aren't counted as found that day.
+  const discoveredByKey = new Map<string, number>();
+  for (const job of newJobs) {
+    if (!isTracked(job) || isBaseline || isCategoryBaseline(job)) continue;
+    const key = companyKey(job);
+    discoveredByKey.set(key, (discoveredByKey.get(key) ?? 0) + 1);
+  }
+  const daily = await recordDailyStats(db, trackedCompanies, discoveredByKey, failedKeys);
+
   const updatedCount = isBaseline ? 0 : changedJobs.length;
   if (updatedCount > 0) console.log(`[scan] Updated ${updatedCount} changed jobs.`);
+  if (failures.length > 0) console.error(`[scan] ${failures.length} fetch(es) failed; their jobs were left as-is.`);
   console.log(
     `[scan] ${isBaseline ? "Baseline" : "Delta"} scan complete. ` +
-    `Total: ${allJobs.length} matching jobs. New: ${isBaseline ? 0 : newJobs.length}. Updated: ${updatedCount}.`,
+    `Total: ${totalJobs} matching jobs. New: ${newJobCount}. Updated: ${updatedCount}.`,
   );
 
-  return {
-    jobs: allJobs,
-    newJobCount: isBaseline ? 0 : newJobs.length,
-    totalJobs: allJobs.length,
-    isBaseline,
-  };
+  return { jobs: allJobs, newJobCount, totalJobs, isBaseline, failures, daily };
 }

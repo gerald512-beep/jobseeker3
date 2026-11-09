@@ -106,4 +106,7 @@ export const COMPANIES: Company[] = [
   { slug: "tiktok", label: "TikTok", source: "tiktok", category: "cx", jdKeywords: ["GNE"] },
   // CX — Teamtailor
   { slug: "moove", label: "Moove", source: "teamtailor", category: "cx", ttDomain: "careers.moove.io" },
+
+  // Adobe tracker — every US posting on careers.adobe.com, with daily counts
+  { slug: "adobe", label: "Adobe", source: "adobe", category: "adobe", trackAll: true },
 ];
