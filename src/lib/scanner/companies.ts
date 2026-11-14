@@ -38,6 +38,7 @@ export const COMPANIES: Company[] = [
   { slug: "bland",      label: "Bland",      source: "ashby", category: "so" },
   { slug: "glia",       label: "Glia",       source: "ashby", category: "so" },
   { slug: "arena",      label: "Arena",      source: "ashby", category: "so" },
+  { slug: "gen-digital",label: "Gen Digital",source: "ashby", category: "so" },
   // S&O — Workday
   { slug: "zendesk",   label: "Zendesk",   source: "workday", category: "so", wdInstance: "wd1",  wdBoard: "zendesk" },
   { slug: "verizon",   label: "Verizon",   source: "workday", category: "so", wdInstance: "wd12", wdBoard: "verizon-careers" },
@@ -88,6 +89,7 @@ export const COMPANIES: Company[] = [
   { slug: "bland",      label: "Bland",      source: "ashby", category: "cx" },
   { slug: "glia",       label: "Glia",       source: "ashby", category: "cx" },
   { slug: "arena",      label: "Arena",      source: "ashby", category: "cx" },
+  { slug: "gen-digital",label: "Gen Digital",source: "ashby", category: "cx" },
   // CX — Workday
   { slug: "zendesk",   label: "Zendesk",   source: "workday", category: "cx", wdInstance: "wd1",  wdBoard: "zendesk" },
   { slug: "verizon",   label: "Verizon",   source: "workday", category: "cx", wdInstance: "wd12", wdBoard: "verizon-careers" },
